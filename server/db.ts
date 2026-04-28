@@ -1,15 +1,18 @@
 import { eq, and, gte, lte, desc, asc } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import Database from "better-sqlite3";
 import { InsertUser, users, trades, propFirmAccounts, propFirmPurchases, tradeJournalEntries, tradeScreenshots, Trade, PropFirmAccount } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
+  if (!_db) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      const dbPath = process.env.DATABASE_URL || "./edgejournal.db";
+      const sqlite = new Database(dbPath);
+      sqlite.pragma("journal_mode = WAL");
+      _db = drizzle(sqlite);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -68,7 +71,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.lastSignedIn = new Date();
     }
 
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
+    await db.insert(users).values(values).onConflictDoUpdate({
+      target: users.openId,
       set: updateSet,
     });
   } catch (error) {
@@ -207,14 +211,14 @@ export async function createTrade(tradeData: {
     propFirmAccountId: tradeData.propFirmAccountId,
     instrument: tradeData.instrument,
     direction: tradeData.direction,
-    entryPrice: String(tradeData.entryPrice),
-    exitPrice: String(tradeData.exitPrice),
+    entryPrice: tradeData.entryPrice,
+    exitPrice: tradeData.exitPrice,
     quantity: tradeData.quantity,
     entryTime: tradeData.entryTime,
     exitTime: tradeData.exitTime,
-    grossPnL: String(tradeData.grossPnL),
-    commission: tradeData.commission ? String(tradeData.commission) : "0",
-    netPnL: String(tradeData.netPnL),
+    grossPnL: tradeData.grossPnL,
+    commission: tradeData.commission ?? 0,
+    netPnL: tradeData.netPnL,
     strategy: tradeData.strategy,
     importedFrom: tradeData.importedFrom || "MANUAL",
   });
@@ -224,16 +228,7 @@ export async function updateTrade(tradeId: number, userId: number, updates: Part
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const updateData: Record<string, any> = {};
-  for (const [key, value] of Object.entries(updates)) {
-    if (value !== undefined && typeof value === 'number' && ['entryPrice', 'exitPrice', 'grossPnL', 'commission', 'netPnL'].includes(key)) {
-      updateData[key] = String(value);
-    } else {
-      updateData[key] = value;
-    }
-  }
-
-  return db.update(trades).set(updateData).where(and(eq(trades.id, tradeId), eq(trades.userId, userId)));
+  return db.update(trades).set(updates).where(and(eq(trades.id, tradeId), eq(trades.userId, userId)));
 }
 
 export async function deleteTrade(tradeId: number, userId: number) {
@@ -320,8 +315,8 @@ export async function calculateDailyPnL(userId: number, accountId: number, date:
     )
   );
 
-  const totalPnL = dailyTrades.reduce((sum, trade) => sum + parseFloat(String(trade.netPnL)), 0);
-  const winCount = dailyTrades.filter(t => parseFloat(String(t.netPnL)) > 0).length;
+  const totalPnL = dailyTrades.reduce((sum, trade) => sum + trade.netPnL, 0);
+  const winCount = dailyTrades.filter(t => t.netPnL > 0).length;
 
   return {
     date,
@@ -349,11 +344,11 @@ export async function calculateAccountStats(userId: number, accountId: number) {
     };
   }
 
-  const wins = accountTrades.filter(t => parseFloat(String(t.netPnL)) > 0);
-  const losses = accountTrades.filter(t => parseFloat(String(t.netPnL)) < 0);
+  const wins = accountTrades.filter(t => t.netPnL > 0);
+  const losses = accountTrades.filter(t => t.netPnL < 0);
 
-  const totalWins = wins.reduce((sum, t) => sum + parseFloat(String(t.netPnL)), 0);
-  const totalLosses = Math.abs(losses.reduce((sum, t) => sum + parseFloat(String(t.netPnL)), 0));
+  const totalWins = wins.reduce((sum, t) => sum + t.netPnL, 0);
+  const totalLosses = Math.abs(losses.reduce((sum, t) => sum + t.netPnL, 0));
   const totalPnL = totalWins - totalLosses;
 
   return {

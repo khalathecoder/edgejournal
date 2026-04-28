@@ -1,108 +1,94 @@
-import { decimal, int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean } from "drizzle-orm/mysql-core";
+import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
-/**
- * Core user table backing auth flow.
- * Extend this file with additional tables as your product grows.
- * Columns use camelCase to match both database fields and generated types.
- */
-export const users = mysqlTable("users", {
-  /**
-   * Surrogate primary key. Auto-incremented numeric value managed by the database.
-   * Use this for relations between tables.
-   */
-  id: int("id").autoincrement().primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
+export const users = sqliteTable("users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  openId: text("openId").notNull().unique(),
   name: text("name"),
-  email: varchar("email", { length: 320 }),
-  loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  email: text("email"),
+  loginMethod: text("loginMethod"),
+  role: text("role", { enum: ["user", "admin"] }).default("user").notNull(),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  lastSignedIn: integer("lastSignedIn", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// Prop Firm Accounts
-export const propFirmAccounts = mysqlTable("propFirmAccounts", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  accountName: varchar("accountName", { length: 255 }).notNull(),
-  firmName: varchar("firmName", { length: 255 }).notNull(),
-  accountNumber: varchar("accountNumber", { length: 255 }),
-  isActive: boolean("isActive").default(true).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+export const propFirmAccounts = sqliteTable("propFirmAccounts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("userId").notNull(),
+  accountName: text("accountName").notNull(),
+  firmName: text("firmName").notNull(),
+  accountNumber: text("accountNumber"),
+  isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
 
 export type PropFirmAccount = typeof propFirmAccounts.$inferSelect;
 export type InsertPropFirmAccount = typeof propFirmAccounts.$inferInsert;
 
-// Prop Firm Purchases
-export const propFirmPurchases = mysqlTable("propFirmPurchases", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  firmName: varchar("firmName", { length: 255 }).notNull(),
-  purchaseDate: timestamp("purchaseDate").notNull(),
-  accountCount: int("accountCount").notNull(),
-  costPerAccount: decimal("costPerAccount", { precision: 10, scale: 2 }),
-  totalCost: decimal("totalCost", { precision: 10, scale: 2 }),
+export const propFirmPurchases = sqliteTable("propFirmPurchases", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("userId").notNull(),
+  firmName: text("firmName").notNull(),
+  purchaseDate: integer("purchaseDate", { mode: "timestamp" }).notNull(),
+  accountCount: integer("accountCount").notNull(),
+  costPerAccount: real("costPerAccount"),
+  totalCost: real("totalCost"),
   notes: text("notes"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
 
 export type PropFirmPurchase = typeof propFirmPurchases.$inferSelect;
 export type InsertPropFirmPurchase = typeof propFirmPurchases.$inferInsert;
 
-// Trades
-export const trades = mysqlTable("trades", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  propFirmAccountId: int("propFirmAccountId").notNull(),
-  instrument: varchar("instrument", { length: 50 }).notNull(),
-  direction: mysqlEnum("direction", ["LONG", "SHORT"]).notNull(),
-  entryPrice: decimal("entryPrice", { precision: 12, scale: 4 }).notNull(),
-  exitPrice: decimal("exitPrice", { precision: 12, scale: 4 }).notNull(),
-  quantity: int("quantity").notNull(),
-  entryTime: timestamp("entryTime").notNull(),
-  exitTime: timestamp("exitTime").notNull(),
-  grossPnL: decimal("grossPnL", { precision: 12, scale: 2 }).notNull(),
-  commission: decimal("commission", { precision: 10, scale: 2 }).default("0"),
-  netPnL: decimal("netPnL", { precision: 12, scale: 2 }).notNull(),
-  strategy: varchar("strategy", { length: 255 }),
-  importedFrom: varchar("importedFrom", { length: 50 }).default("MANUAL").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+export const trades = sqliteTable("trades", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("userId").notNull(),
+  propFirmAccountId: integer("propFirmAccountId").notNull(),
+  instrument: text("instrument").notNull(),
+  direction: text("direction", { enum: ["LONG", "SHORT"] }).notNull(),
+  entryPrice: real("entryPrice").notNull(),
+  exitPrice: real("exitPrice").notNull(),
+  quantity: integer("quantity").notNull(),
+  entryTime: integer("entryTime", { mode: "timestamp" }).notNull(),
+  exitTime: integer("exitTime", { mode: "timestamp" }).notNull(),
+  grossPnL: real("grossPnL").notNull(),
+  commission: real("commission").default(0),
+  netPnL: real("netPnL").notNull(),
+  strategy: text("strategy"),
+  importedFrom: text("importedFrom").default("MANUAL").notNull(),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
 
 export type Trade = typeof trades.$inferSelect;
 export type InsertTrade = typeof trades.$inferInsert;
 
-// Trade Journal Entries
-export const tradeJournalEntries = mysqlTable("tradeJournalEntries", {
-  id: int("id").autoincrement().primaryKey(),
-  tradeId: int("tradeId").notNull(),
-  userId: int("userId").notNull(),
+export const tradeJournalEntries = sqliteTable("tradeJournalEntries", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tradeId: integer("tradeId").notNull(),
+  userId: integer("userId").notNull(),
   content: text("content"),
   tags: text("tags"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
 
 export type TradeJournalEntry = typeof tradeJournalEntries.$inferSelect;
 export type InsertTradeJournalEntry = typeof tradeJournalEntries.$inferInsert;
 
-// Trade Screenshots
-export const tradeScreenshots = mysqlTable("tradeScreenshots", {
-  id: int("id").autoincrement().primaryKey(),
-  tradeId: int("tradeId").notNull(),
-  userId: int("userId").notNull(),
-  storageKey: varchar("storageKey", { length: 255 }).notNull(),
-  storageUrl: varchar("storageUrl", { length: 512 }).notNull(),
-  caption: varchar("caption", { length: 255 }),
-  uploadedAt: timestamp("uploadedAt").defaultNow().notNull(),
+export const tradeScreenshots = sqliteTable("tradeScreenshots", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tradeId: integer("tradeId").notNull(),
+  userId: integer("userId").notNull(),
+  storageKey: text("storageKey").notNull(),
+  storageUrl: text("storageUrl").notNull(),
+  caption: text("caption"),
+  uploadedAt: integer("uploadedAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
 
 export type TradeScreenshot = typeof tradeScreenshots.$inferSelect;
