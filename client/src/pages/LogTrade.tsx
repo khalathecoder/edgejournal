@@ -7,6 +7,12 @@ import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
+const PRESET_TAGS: Record<string, string[]> = {
+  Emotion: ["fomo", "revenge", "patient", "anxious", "confident", "greedy"],
+  Mistake: ["early-entry", "late-entry", "moved-stop", "no-stop", "overtraded", "chased"],
+  Setup: ["breakout", "pullback", "reversal", "trend-follow", "range"],
+};
+
 export default function LogTrade() {
   const [, navigate] = useLocation();
   const [loading, setLoading] = useState(false);
@@ -27,7 +33,11 @@ export default function LogTrade() {
     strategy: "",
   });
 
+  const [journalContent, setJournalContent] = useState("");
+  const [journalTags, setJournalTags] = useState<string[]>([]);
+
   const createTrade = trpc.trades.create.useMutation();
+  const upsertJournal = trpc.journal.upsert.useMutation();
 
   const handleChange = (
     e: React.ChangeEvent<
@@ -36,6 +46,12 @@ export default function LogTrade() {
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const toggleTag = (tag: string) => {
+    setJournalTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
   };
 
   const calculatePnL = () => {
@@ -68,7 +84,7 @@ export default function LogTrade() {
     try {
       const netPnL = calculatePnL();
 
-      await createTrade.mutateAsync({
+      const newTrade = await createTrade.mutateAsync({
         propFirmAccountId: formData.propFirmAccountId,
         instrument: formData.instrument,
         direction: formData.direction,
@@ -82,6 +98,15 @@ export default function LogTrade() {
         strategy: formData.strategy,
       });
 
+      // Save journal entry if content or tags exist
+      if (journalContent.trim() || journalTags.length > 0) {
+        await upsertJournal.mutateAsync({
+          tradeId: newTrade.id,
+          content: journalContent.trim(),
+          tags: journalTags.join(","),
+        });
+      }
+
       toast.success("Trade logged successfully!");
       setFormData({
         propFirmAccountId: formData.propFirmAccountId,
@@ -94,6 +119,8 @@ export default function LogTrade() {
         exitTime: "",
         strategy: "",
       });
+      setJournalContent("");
+      setJournalTags([]);
 
       // Navigate to dashboard
       setTimeout(() => navigate("/"), 1000);
@@ -273,6 +300,60 @@ export default function LogTrade() {
                 </p>
               </div>
             )}
+
+            {/* Journal Section */}
+            <div className="border-t border-border pt-6">
+              <h3 className="text-sm font-semibold mb-1">Journal Entry</h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Capture your thoughts while they're fresh — what happened, how you felt, what to fix next time.
+              </p>
+
+              <textarea
+                value={journalContent}
+                onChange={(e) => setJournalContent(e.target.value)}
+                placeholder="e.g. Chased the breakout after missing the initial entry. Felt anxious watching it run without me. Need to stick to the plan and wait for pullbacks."
+                rows={4}
+                className="w-full px-4 py-2 bg-input border border-border rounded-lg text-foreground text-sm focus:border-primary focus:ring-1 focus:ring-primary resize-none"
+              />
+
+              {/* Tag Presets */}
+              <div className="mt-3 space-y-2">
+                {Object.entries(PRESET_TAGS).map(([category, tags]) => (
+                  <div key={category}>
+                    <p className="text-muted-foreground text-xs mb-1">{category}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {tags.map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => toggleTag(tag)}
+                          className={`px-2 py-0.5 rounded text-xs border transition-all ${
+                            journalTags.includes(tag)
+                              ? "bg-primary border-primary text-primary-foreground"
+                              : "bg-transparent border-border text-muted-foreground hover:border-primary hover:text-foreground"
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {journalTags.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {journalTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="px-2 py-0.5 bg-primary bg-opacity-20 text-primary rounded text-xs"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Submit Button */}
             <Button
