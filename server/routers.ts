@@ -17,12 +17,17 @@ const tradeRouter = router({
       return db.getTradesByAccountId(input.accountId, ctx.user.id);
     }),
 
-  // Get all trades for the user
+  // Get all trades for the user (flat)
   getAll: protectedProcedure.query(async ({ ctx }) => {
     return db.getTradesByUserId(ctx.user.id);
   }),
 
-  // Get a single trade with its journal entry and screenshots
+  // Get all trades grouped by position (TP1/TP2 partials collapsed)
+  getAllGrouped: protectedProcedure.query(async ({ ctx }) => {
+    return db.getGroupedTrades(ctx.user.id);
+  }),
+
+  // Get a single trade group with journal, screenshots, and all partials
   getById: protectedProcedure
     .input(z.object({ tradeId: z.number() }))
     .query(async ({ ctx, input }) => {
@@ -32,7 +37,67 @@ const tradeRouter = router({
       const journal = await db.getJournalEntryByTradeId(input.tradeId, ctx.user.id);
       const screenshots = await db.getScreenshotsByTradeId(input.tradeId, ctx.user.id);
 
-      return { trade, journal, screenshots };
+      // Fetch all partials if this trade belongs to a group
+      let partials = [trade];
+      if (trade.tradeGroupId) {
+        partials = await db.getTradesByGroupId(trade.tradeGroupId, ctx.user.id);
+        partials.sort((a, b) => new Date(a.entryTime).getTime() - new Date(b.entryTime).getTime());
+      }
+      const totalNetPnL = partials.reduce((sum, t) => sum + t.netPnL, 0);
+
+      return { trade, partials, totalNetPnL, journal, screenshots };
+    }),
+
+  // AI analysis for a specific trade or group
+  analyzeOne: protectedProcedure
+    .input(z.object({ tradeId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const trade = await db.getTradeById(input.tradeId, ctx.user.id);
+      if (!trade) throw new Error("Trade not found");
+
+      let partials = [trade];
+      if (trade.tradeGroupId) {
+        partials = await db.getTradesByGroupId(trade.tradeGroupId, ctx.user.id);
+        partials.sort((a, b) => new Date(a.entryTime).getTime() - new Date(b.entryTime).getTime());
+      }
+
+      const journal = await db.getJournalEntryByTradeId(input.tradeId, ctx.user.id);
+      const totalNetPnL = partials.reduce((sum, t) => sum + t.netPnL, 0);
+
+      const partialsText = partials.length > 1
+        ? partials.map((p, i) =>
+            `  Exit ${i + 1}: price ${p.exitPrice}, qty ${p.quantity}, P&L $${p.netPnL}`
+          ).join("\n")
+        : null;
+
+      const prompt = `Analyze this trade and give direct coaching feedback:
+
+${trade.instrument} ${trade.direction}
+Entry: ${trade.entryPrice} at ${new Date(trade.entryTime).toLocaleString()}
+${partialsText
+  ? `Partial exits:\n${partialsText}\nTotal P&L: $${totalNetPnL.toFixed(2)}`
+  : `Exit: ${trade.exitPrice}\nNet P&L: $${trade.netPnL}`}
+${trade.strategy ? `Strategy: ${trade.strategy}` : ""}
+
+Trader's notes: ${journal?.content || "None"}
+Psychology: ${journal?.psychology || "None"}
+Tags: ${journal?.tags || "None"}
+Followed entry rules: ${journal?.meetsEntryRules || "Not assessed"}
+
+Reply in exactly 3 short sections (2 sentences each max):
+**What happened** — objective read of the trade
+**Key factor** — the one thing that made or broke this trade
+**Next time** — one specific, actionable change`;
+
+      const response = await invokeLLM({
+        messages: [
+          { role: "system", content: "You are a professional futures trading coach. Be direct and specific. No filler." },
+          { role: "user", content: prompt },
+        ],
+      });
+
+      const analysis = response.choices[0]?.message.content;
+      return { analysis: typeof analysis === "string" ? analysis : null };
     }),
 
   // Create a new trade

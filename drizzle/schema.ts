@@ -61,6 +61,7 @@ export const trades = sqliteTable("trades", {
   netPnL: real("netPnL").notNull(),
   strategy: text("strategy"),
   importedFrom: text("importedFrom").default("MANUAL").notNull(),
+  tradeGroupId: text("tradeGroupId"),
   createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });

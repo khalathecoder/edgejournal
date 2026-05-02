@@ -19,6 +19,7 @@ export function registerNt8Webhook(app: Express) {
         commission,
         netPnL,
         strategy,
+        positionId, // optional — links TP1/TP2 partials of the same position
       } = req.body;
 
       if (!ENV.nt8WebhookSecret) {
@@ -74,6 +75,7 @@ export function registerNt8Webhook(app: Express) {
         netPnL: parseFloat(netPnL) || 0,
         strategy: String(strategy ?? ""),
         importedFrom: "NT8_LIVE",
+        tradeGroupId: positionId ? String(positionId) : undefined,
       });
 
       console.log(`[NT8] Trade synced: ${instrument} ${direction} @ ${entryPrice} → ${exitPrice} | PnL: ${netPnL}`);

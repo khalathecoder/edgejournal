@@ -187,6 +187,51 @@ export async function getTradeById(tradeId: number, userId: number) {
   return result.length > 0 ? result[0] : null;
 }
 
+export async function getTradesByGroupId(tradeGroupId: string, userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(trades)
+    .where(and(eq(trades.tradeGroupId, tradeGroupId), eq(trades.userId, userId)))
+    .orderBy(asc(trades.entryTime));
+}
+
+export async function getGroupedTrades(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const allTrades = await db.select().from(trades)
+    .where(eq(trades.userId, userId))
+    .orderBy(asc(trades.entryTime));
+
+  const groupMap = new Map<string, typeof allTrades>();
+  for (const trade of allTrades) {
+    const key = trade.tradeGroupId ?? `solo-${trade.id}`;
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key)!.push(trade);
+  }
+
+  return Array.from(groupMap.values()).map((partials) => {
+    const sorted = [...partials].sort(
+      (a, b) => new Date(a.entryTime).getTime() - new Date(b.entryTime).getTime()
+    );
+    const primary = sorted[0];
+    const totalNetPnL = partials.reduce((sum, t) => sum + t.netPnL, 0);
+    return {
+      groupId: primary.tradeGroupId ?? null,
+      primaryTradeId: primary.id,
+      instrument: primary.instrument,
+      direction: primary.direction,
+      entryPrice: primary.entryPrice,
+      entryTime: primary.entryTime,
+      exitTime: sorted[sorted.length - 1].exitTime,
+      totalNetPnL,
+      partials: sorted,
+    };
+  }).sort(
+    (a, b) => new Date(b.exitTime).getTime() - new Date(a.exitTime).getTime()
+  );
+}
+
 export async function createTrade(tradeData: {
   userId: number;
   propFirmAccountId: number;
@@ -202,6 +247,7 @@ export async function createTrade(tradeData: {
   netPnL: number;
   strategy?: string;
   importedFrom?: string;
+  tradeGroupId?: string;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -221,6 +267,7 @@ export async function createTrade(tradeData: {
     netPnL: tradeData.netPnL,
     strategy: tradeData.strategy,
     importedFrom: tradeData.importedFrom || "MANUAL",
+    tradeGroupId: tradeData.tradeGroupId,
   });
   return { id: Number(result.lastInsertRowid) };
 }
