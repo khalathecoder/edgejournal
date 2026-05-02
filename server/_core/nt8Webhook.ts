@@ -29,6 +29,15 @@ export function registerNt8Webhook(app: Express) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
+      // Skip cancelled / unfilled orders: must have quantity > 0 and valid non-zero prices
+      const qty = parseInt(quantity) || 0;
+      const entry = parseFloat(entryPrice) || 0;
+      const exit = parseFloat(exitPrice) || 0;
+      if (qty <= 0 || entry <= 0 || exit <= 0) {
+        console.log(`[NT8] Skipping cancelled/unfilled order: ${instrument} qty=${qty} entry=${entry} exit=${exit}`);
+        return res.json({ success: true, skipped: true });
+      }
+
       const ownerUser = await db.getUserByOpenId(ENV.ownerOpenId);
       if (!ownerUser) {
         return res.status(404).json({ error: "Owner user not found — log in to EdgeJournal first" });

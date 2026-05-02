@@ -74,6 +74,9 @@ export const tradeJournalEntries = sqliteTable("tradeJournalEntries", {
   userId: integer("userId").notNull(),
   content: text("content"),
   tags: text("tags"),
+  psychology: text("psychology"),
+  meetsEntryRules: text("meetsEntryRules"),
+  chartUrl: text("chartUrl"),
   createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });

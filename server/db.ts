@@ -206,7 +206,7 @@ export async function createTrade(tradeData: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  return db.insert(trades).values({
+  const result = await db.insert(trades).values({
     userId: tradeData.userId,
     propFirmAccountId: tradeData.propFirmAccountId,
     instrument: tradeData.instrument,
@@ -222,6 +222,7 @@ export async function createTrade(tradeData: {
     strategy: tradeData.strategy,
     importedFrom: tradeData.importedFrom || "MANUAL",
   });
+  return { id: Number(result.lastInsertRowid) };
 }
 
 export async function updateTrade(tradeId: number, userId: number, updates: Partial<Trade>) {
@@ -248,21 +249,25 @@ export async function getJournalEntryByTradeId(tradeId: number, userId: number) 
   return result.length > 0 ? result[0] : null;
 }
 
-export async function createOrUpdateJournalEntry(tradeId: number, userId: number, content: string, tags?: string) {
+export async function createOrUpdateJournalEntry(
+  tradeId: number,
+  userId: number,
+  content: string,
+  tags?: string,
+  psychology?: string,
+  meetsEntryRules?: string,
+  chartUrl?: string,
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
+  const fields = { content, tags, psychology, meetsEntryRules, chartUrl };
   const existing = await getJournalEntryByTradeId(tradeId, userId);
 
   if (existing) {
-    return db.update(tradeJournalEntries).set({ content, tags }).where(eq(tradeJournalEntries.id, existing.id));
+    return db.update(tradeJournalEntries).set(fields).where(eq(tradeJournalEntries.id, existing.id));
   } else {
-    return db.insert(tradeJournalEntries).values({
-      tradeId,
-      userId,
-      content,
-      tags,
-    });
+    return db.insert(tradeJournalEntries).values({ tradeId, userId, ...fields });
   }
 }
 

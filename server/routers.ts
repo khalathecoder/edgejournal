@@ -213,10 +213,21 @@ const journalRouter = router({
         tradeId: z.number(),
         content: z.string(),
         tags: z.string().optional(),
+        psychology: z.string().optional(),
+        meetsEntryRules: z.enum(["yes", "partial", "no"]).optional(),
+        chartUrl: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      return db.createOrUpdateJournalEntry(input.tradeId, ctx.user.id, input.content, input.tags);
+      return db.createOrUpdateJournalEntry(
+        input.tradeId,
+        ctx.user.id,
+        input.content,
+        input.tags,
+        input.psychology,
+        input.meetsEntryRules,
+        input.chartUrl,
+      );
     }),
 });
 
